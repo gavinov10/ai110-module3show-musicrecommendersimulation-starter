@@ -1,4 +1,5 @@
 import csv
+from operator import itemgetter
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 
@@ -43,13 +44,16 @@ class Recommender:
     Required by tests/test_recommender.py
     """
     def __init__(self, songs: List[Song]):
+        """Store the catalog of songs this recommender will rank."""
         self.songs = songs
 
     def recommend(self, user: UserProfile, k: int = 5) -> List[Song]:
+        """Return the top k songs for a user (logic not yet implemented)."""
         # TODO: Implement recommendation logic
         return self.songs[:k]
 
     def explain_recommendation(self, user: UserProfile, song: Song) -> str:
+        """Return a human-readable reason a song was recommended (not yet implemented)."""
         # TODO: Implement explanation logic
         return "Explanation placeholder"
 
@@ -85,21 +89,23 @@ def score_song(user_prefs: Dict, song: Dict) -> Tuple[float, List[str]]:
     target_energy = user_prefs.get("energy")
     if target_energy is not None:
         closeness = 1.0 - abs(target_energy - song["energy"])  # both scaled 0..1
-        score += W_ENERGY * closeness
+        points = W_ENERGY * closeness
+        score += points
         if closeness >= 0.9:
             reasons.append(
-                f"energy {song['energy']:.2f} is close to your target {target_energy:.2f}"
+                f"energy {song['energy']:.2f} is close to your target "
+                f"{target_energy:.2f} (+{points:.2f})"
             )
 
     # 2. Genre match (weighted higher — unique information).
     if user_prefs.get("genre") and song.get("genre") == user_prefs["genre"]:
         score += W_GENRE
-        reasons.append(f"matches your favorite genre ({song['genre']})")
+        reasons.append(f"matches your favorite genre ({song['genre']}) (+{W_GENRE:.2f})")
 
     # 3. Mood match (weighted lower — overlaps energy/valence).
     if user_prefs.get("mood") and song.get("mood") == user_prefs["mood"]:
         score += W_MOOD
-        reasons.append(f"matches your mood ({song['mood']})")
+        reasons.append(f"matches your mood ({song['mood']}) (+{W_MOOD:.2f})")
 
     if not reasons:
         reasons.append("partial vibe match")
@@ -110,9 +116,11 @@ def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5) -> List[Tup
     Scores every song, then returns the top k as (song, score, explanation).
     Required by src/main.py
     """
-    scored = []
-    for song in songs:
-        score, reasons = score_song(user_prefs, song)
-        scored.append((song, score, "; ".join(reasons)))
-    scored.sort(key=lambda item: item[1], reverse=True)
-    return scored[:k]
+    # Score every song, building a (song, score, explanation) tuple for each.
+    scored = [
+        (song, score, "; ".join(reasons))
+        for song in songs
+        for score, reasons in [score_song(user_prefs, song)]
+    ]
+    # sorted() returns a NEW list, high score first; keep only the top k.
+    return sorted(scored, key=itemgetter(1), reverse=True)[:k]
